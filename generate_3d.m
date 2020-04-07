@@ -8,58 +8,64 @@ bool_spehre             = 1;      % Make Sphere Visible?
 Overlay_multiple_data   = 1;      % How many data sets?
 bool_plot_point_cloud   = 1;      % Plot every individual w_t?
 bool_ratio_spehre       = 1;      % Show the Threshold of 2.5mm for pointcloud
-bool_import_theta_u     = 1;      % Set whether the imported data has to be converted from theta_u to rotation matrix first
+trusted_radius          = 2.5e-3; % Trusted radius for deviation from Barycenter in meters
+
+bool_import_theta_u     = 0;      % Set whether the imported data has to be converted from theta_u to rotation matrix first
 
 % File import settings
 FolderName              = 'C:\Users\Phrittich\Desktop\Praktikum Aesculap\3D Visualization\data';
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Einheitsvektor
+I = [1 0 0  ;
+    0 1 0  ;
+    0 0 1 ];
+
+
 for struct_index = 1 : Overlay_multiple_data
     [FileName, FolderName]  = uigetfile(fullfile( FolderName,'*.txt'));
     FullPath                = fullfile(FolderName, FileName);
     if(bool_import_theta_u ~= 1)
         imported_data                      = func_import_xyz_rot_mat(FullPath, [4, Inf]);  %Format: X Y Z R11, R12,R13, R21,....
+        struct_data(struct_index).data     = imported_data;
+        struct_data(struct_index).filename = FileName;
+        
     else
         imported_data                      = func_import_xyz_theta_u(FullPath, [4, Inf]);  %Format: X Y Z Theta11 Theta12 Theta 13
+        struct_data(struct_index).filename = FileName;
         
+        % Conversion from theta_u to rotation matrix:
         
-        theta_u = struct_data(calc_index).data(data_point,4:6);
         % Rotation Representation
         % axis/Angle : (u_vec , theta)
         % Theta_u    : theta * u_vec
-        % Matrix     : [r1 r2 r3 ; ....]    
+        % Matrix     : [r1 r2 r3 ; ....]
         
-        theta = norm 
-    
-    wab_vec = [ cos(g); 0; sin(g) ] %Rotaionsaxe
-    
-    wab = [ 0         ,-wab_vec(3), wab_vec(2);
-        wab_vec(3), 0         ,-wab_vec(1);
-        -wab_vec(2), wab_vec(1), 0         ]
-    wab2 = wab * wab
-    
-    
-    % Matrix exponential of rotation
-    ewt_ab = I + sin(theta1*t)*wab+(1-cos(theta1*t))*wab2
-    Rab = ewt_ab
-    
-    
-    
+        theta_u = imported_data(:,4:6);
+        for i=1 : (size(theta_u,1))                             
+            theta = norm(theta_u(i,1:3));                       % angle         
+            u_vec = theta_u(i,1:3) / norm(theta_u(i,1:3));      % axis
+            
+            cross_u_vec =  [    0    , -u_vec(3) ,   u_vec(2);
+                             u_vec(3),     0     ,  -u_vec(1);
+                            -u_vec(2), u_vec(1)  ,      0   ];
+            
+            cross_u_vec2 = cross_u_vec * cross_u_vec ;
+                        
+            % Rodrigues-Formel: Matrix exponential of rotation
+            Rotation_matrix = I + sin(theta)* cross_u_vec + (1-cos(theta)) * cross_u_vec2 ;
+
+            struct_data(struct_index).data(i,4:12)    = [Rotation_matrix(1,1) Rotation_matrix(1,2) Rotation_matrix(1,3) Rotation_matrix(2,1) Rotation_matrix(2,2) Rotation_matrix(2,3) Rotation_matrix(3,1) Rotation_matrix(3,2) Rotation_matrix(3,3)];
+        end
+        struct_data(struct_index).data(:,1:3)     = imported_data(:,1:3);
     end
-    struct_data(struct_index).data     = imported_data;
-    struct_data(struct_index).filename = FileName;
 end
 
 
 
 
 %% AOS - Algebraic One Step
-
-% Einheitsvektor
-I = [1 0 0  ;
-    0 1 0  ;
-    0 0 1 ];
 
 for calc_index = 1 : Overlay_multiple_data
     disp(sprintf('\n\n ########## Results for File [%s]: ################\n' ,struct_data(calc_index).filename));            % Show progress during runtime
@@ -77,11 +83,11 @@ for calc_index = 1 : Overlay_multiple_data
         R(R_index, 1:6)         = [struct_data(calc_index).data(data_point,10:12)   -I(3,1:3)];
         R_index                 = R_index + 1;
         
-        t(t_index)           = struct_data(calc_index).data(data_point,1);
+        t(t_index)              = struct_data(calc_index).data(data_point,1);
         t_index                 = t_index + 1;
-        t(t_index)         = struct_data(calc_index).data(data_point,2);
+        t(t_index)              = struct_data(calc_index).data(data_point,2);
         t_index                 = t_index + 1;
-        t(t_index)         = struct_data(calc_index).data(data_point,3);
+        t(t_index)              = struct_data(calc_index).data(data_point,3);
         t_index                 = t_index + 1;
     end
     
@@ -146,7 +152,7 @@ for calc_index = 1 : Overlay_multiple_data
     %
     %     msgbox( { sprintf('The Barycenter for File: %s was NOT accepted', struct_data(calc_index).filename) , sprintf('The Barycenter = [%0.5d  %0.5d  %0.5d]', struct_data(calc_index).barycenter(1),struct_data(calc_index).barycenter(2), struct_data(calc_index).barycenter(3)) },'Not Accepted','error');
     %
-
+    
     
 end
 
@@ -158,7 +164,7 @@ for plot_index = 1 : Overlay_multiple_data
     if (plot_index == 1)        %Set different color for different datasets
         RGB = [256 0 0]/256 ;   % First Always Red!
     else
-        r = rand(1,3);
+        r = rand(1,3); % Random colour
         RGB = [256*r(1) 256*r(2) 265*r(3)]/256 ;
         RGB = [0 0 256]/256 ;
     end
@@ -177,12 +183,12 @@ for plot_index = 1 : Overlay_multiple_data
     
     
     %Plot w_t -> diamond
-    p = scatter3(struct_data(plot_index).w_t_algorith(1), struct_data(plot_index).w_t_algorith(2) , struct_data(plot_index).w_t_algorith(3) , 50 , RGB, 'd','DisplayName', sprintf('w_t from algorithm for file %s',struct_data(plot_index).filename));  % d = diamond  % 50 = size
+    p = scatter3(struct_data(plot_index).w_t_algorith(1), struct_data(plot_index).w_t_algorith(2) , struct_data(plot_index).w_t_algorith(3) , 50 , RGB, 'd','DisplayName', sprintf('w_t from algorithm for file: %s',struct_data(plot_index).filename));  % d = diamond  % 50 = size
     text_handle = text(struct_data(plot_index).w_t_algorith(1), struct_data(plot_index).w_t_algorith(2) , struct_data(plot_index).w_t_algorith(3), ['\leftarrow' , sprintf('w_{t}_{mean} %d',plot_index)], 'Color',RGB,'FontSize',7);
     hold on;
     
     %Plot barycenter -> pentagram
-    p = scatter3(struct_data(plot_index).barycenter(1), struct_data(plot_index).barycenter(2) , struct_data(plot_index).barycenter(3) , 50 , RGB, 'p','DisplayName', sprintf('Barycenter from mean of all w_t_individ for file %s',struct_data(plot_index).filename));  % d = diamond  % 50 = size
+    p = scatter3(struct_data(plot_index).barycenter(1), struct_data(plot_index).barycenter(2) , struct_data(plot_index).barycenter(3) , 50 , RGB, 'p','DisplayName', sprintf('Barycenter from mean of all w_t_individ for file: %s',struct_data(plot_index).filename));  % d = diamond  % 50 = size
     text_handle = text(struct_data(plot_index).barycenter(1), struct_data(plot_index).barycenter(2) , struct_data(plot_index).barycenter(3), ['\leftarrow' , sprintf('BC %d',plot_index)], 'Color',RGB,'FontSize',7);
     hold on;
     
@@ -197,7 +203,7 @@ for plot_index = 1 : Overlay_multiple_data
     if(bool_ratio_spehre == 1)
         figure(1);
         [X,Y,Z] = sphere(100); %Sphere with 100 Faces
-        sphe = surf(X*2.5e-3 + struct_data(plot_index).barycenter(1), Y*2.5e-3 + struct_data(plot_index).barycenter(2), Z*2.5e-3 + struct_data(plot_index).barycenter(3), 'FaceAlpha',0 , 'EdgeAlpha',0.07,'HandleVisibility','off');
+        sphe = surf(X*trusted_radius + struct_data(plot_index).barycenter(1), Y*trusted_radius + struct_data(plot_index).barycenter(2), Z*trusted_radius + struct_data(plot_index).barycenter(3), 'FaceAlpha',0 , 'EdgeAlpha',0.07,'HandleVisibility','off');
         sphe.FaceColor = RGB;
         sphe.EdgeColor = RGB;
         xlabel('x')
